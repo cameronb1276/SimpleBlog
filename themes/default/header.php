@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
     
     <!-- Theme CSS -->
-    <link rel="stylesheet" href="/themes/<?php echo getActiveTheme(); ?>/style.css">
+    <link rel="stylesheet" href="/themes/<?php echo getActiveTheme(); ?>/style.css?v=<?php echo time(); ?>">
     
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="/assets/favicon.ico">

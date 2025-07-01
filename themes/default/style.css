@@ -112,6 +112,7 @@ a:hover {
     width: 100%;
     max-width: 1200px;
     margin: 0 auto;
+    padding: 0 1rem; /* Fallback */
     padding: 0 var(--container-padding);
 }
 
@@ -120,8 +121,11 @@ a:hover {
    ========================================================================== */
 
 .site-header {
+    background: #ffffff; /* Fallback */
     background: var(--bg-secondary);
+    border-bottom: 3px solid #007bff; /* Fallback */
     border-bottom: 3px solid var(--primary-color);
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075); /* Fallback */
     box-shadow: var(--shadow-sm);
     position: sticky;
     top: 0;
@@ -210,14 +214,18 @@ a:hover {
 }
 
 .nav-link {
+    color: #495057; /* Fallback */
     color: var(--text-secondary);
     font-weight: 500;
     padding: 0.5rem 0;
+    transition: color 0.15s ease-in-out; /* Fallback */
     transition: color var(--transition-fast);
     position: relative;
+    text-decoration: none;
 }
 
 .nav-link:hover {
+    color: #007bff; /* Fallback */
     color: var(--primary-color);
 }
 
@@ -228,7 +236,9 @@ a:hover {
     left: 0;
     width: 0;
     height: 2px;
+    background: #007bff; /* Fallback */
     background: var(--primary-color);
+    transition: width 0.15s ease-in-out; /* Fallback */
     transition: width var(--transition-fast);
 }
 

@@ -120,11 +120,14 @@ a:hover {
    ========================================================================== */
 
 .site-header {
+    background: #1e293b; /* Fallback for dark theme */
     background: var(--bg-secondary);
+    border-bottom: 1px solid #334155; /* Fallback for dark theme */
     border-bottom: 1px solid var(--border-color);
     position: sticky;
     top: 0;
     z-index: 1000;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3); /* Fallback for dark theme */
     box-shadow: var(--shadow-sm);
 }
 
@@ -209,14 +212,18 @@ a:hover {
 }
 
 .nav-link {
+    color: #cbd5e1; /* Fallback for dark theme */
     color: var(--text-secondary);
     font-weight: 500;
     padding: 0.5rem 0;
+    transition: color 0.15s ease-in-out; /* Fallback */
     transition: color var(--transition-fast);
     position: relative;
+    text-decoration: none;
 }
 
 .nav-link:hover {
+    color: #6366f1; /* Fallback for dark theme */
     color: var(--primary-color);
 }
 
@@ -227,7 +234,9 @@ a:hover {
     left: 0;
     width: 0;
     height: 2px;
+    background: #6366f1; /* Fallback for dark theme */
     background: var(--primary-color);
+    transition: width 0.15s ease-in-out; /* Fallback */
     transition: width var(--transition-fast);
 }
 
