@@ -206,4 +206,4 @@ We welcome contributions! Please feel free to:
 
 *SimpleBlog - Built with ❤️ for the modern web*
 
-**Created by Cam** - [cameron9823@gmail.com](mailto:cameron9823@gmail.com)
+**Created by Cam**
