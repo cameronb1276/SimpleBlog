@@ -1,0 +1,23 @@
+{
+    "name": "Default Theme",
+    "version": "1.0.0",
+    "author": "SimpleBlog",
+    "description": "Clean and simple default theme for SimpleBlog",
+    "required_files": [
+        "header.php",
+        "footer.php", 
+        "index.php",
+        "post.php",
+        "style.css"
+    ],
+    "optional_files": [
+        "404.php",
+        "archive.php",
+        "search.php"
+    ],
+    "supports": [
+        "featured-images",
+        "pagination",
+        "post-excerpts"
+    ]
+}

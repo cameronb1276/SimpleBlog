@@ -1,0 +1,14 @@
+/* Additional admin styles extracted from PHP files */
+
+.delete-form {
+    display: inline;
+}
+
+.featured-image-current {
+    margin-bottom: 10px;
+}
+
+.featured-image-preview {
+    max-width: 200px;
+    height: auto;
+}

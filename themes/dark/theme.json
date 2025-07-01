@@ -1,0 +1,7 @@
+{
+    "name": "Dark Theme",
+    "version": "2.0.0",
+    "author": "SimpleBlog",
+    "description": "Modern dark theme with mobile-first responsive design",
+    "required_files": ["header.php", "footer.php", "index.php", "post.php", "style.css"]
+}
