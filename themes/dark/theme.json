@@ -1,7 +1,24 @@
 {
     "name": "Dark Theme",
-    "version": "2.0.0",
+    "version": "1.0.0",
     "author": "SimpleBlog",
-    "description": "Modern dark theme with mobile-first responsive design",
-    "required_files": ["header.php", "footer.php", "index.php", "post.php", "style.css"]
+    "description": "A sleek dark theme with modern design and excellent readability",
+    "required_files": [
+        "header.php",
+        "footer.php", 
+        "index.php",
+        "post.php",
+        "style.css"
+    ],
+    "optional_files": [
+        "404.php",
+        "archive.php",
+        "search.php"
+    ],
+    "supports": [
+        "featured-images",
+        "pagination",
+        "post-excerpts",
+        "dark-mode"
+    ]
 }

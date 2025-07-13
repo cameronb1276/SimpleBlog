@@ -92,7 +92,7 @@ loadThemeTemplate('header', compact('settings', 'page_title', 'page_description'
                         </svg>
                     </a>
                     
-                    <button class="share-button copy-link" onclick="copyToClipboard('<?php echo 'http://' . $_SERVER['HTTP_HOST'] . '/post/' . $post['slug']; ?>')" aria-label="Copy link">
+                    <button class="share-button copy-link" onclick="copyToClipboard('<?php echo 'http://' . $_SERVER['HTTP_HOST'] . '/post/' . $post['slug']; ?>', event)" aria-label="Copy link">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
@@ -105,7 +105,7 @@ loadThemeTemplate('header', compact('settings', 'page_title', 'page_description'
 </article>
 
 <script>
-function copyToClipboard(text) {
+function copyToClipboard(text, event) {
     navigator.clipboard.writeText(text).then(function() {
         // Show feedback
         const button = event.target.closest('.copy-link');

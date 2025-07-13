@@ -16,7 +16,9 @@ if ($_POST['action'] ?? '' === 'activate_theme') {
     } else {
         $themeName = $_POST['theme_name'] ?? '';
         if (setActiveTheme($themeName)) {
-            $success = "Theme '$themeName' activated successfully!";
+            // Redirect to prevent form resubmission
+            header('Location: themes.php?activated=' . urlencode($themeName));
+            exit;
         } else {
             $error = "Failed to activate theme '$themeName'. Theme may be invalid.";
         }
@@ -50,6 +52,12 @@ if ($_POST['action'] ?? '' === 'upload_theme') {
             $error = 'Theme name is required.';
         } elseif (!preg_match('/^[a-zA-Z0-9_-]+$/', $themeName)) {
             $error = 'Theme name can only contain letters, numbers, hyphens, and underscores.';
+        } elseif (!isset($_FILES['theme_zip']) || $_FILES['theme_zip']['error'] !== UPLOAD_ERR_OK) {
+            if ($_FILES['theme_zip']['error'] === UPLOAD_ERR_NO_FILE) {
+                $error = 'Please select a ZIP file to upload.';
+            } else {
+                $error = 'File upload error. Please try again.';
+            }
         } elseif (isset($_FILES['theme_zip']) && $_FILES['theme_zip']['error'] === UPLOAD_ERR_OK) {
             $uploadPath = $_FILES['theme_zip']['tmp_name'];
             $uploadSize = $_FILES['theme_zip']['size'];
@@ -80,10 +88,13 @@ if ($_POST['action'] ?? '' === 'upload_theme') {
                     }
                 }
             }
-        } else {
-            $error = 'Please select a ZIP file to upload.';
         }
     }
+}
+
+// Check for activation success message from redirect
+if (isset($_GET['activated'])) {
+    $success = "Theme '" . htmlspecialchars($_GET['activated']) . "' activated successfully!";
 }
 
 $installedThemes = getInstalledThemes();

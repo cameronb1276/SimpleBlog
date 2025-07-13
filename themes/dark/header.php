@@ -2,15 +2,16 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
     <title><?php echo isset($page_title) ? htmlspecialchars($page_title) . ' - ' : ''; ?><?php echo htmlspecialchars($settings['site_title']); ?></title>
     <meta name="description" content="<?php echo htmlspecialchars($page_description ?? $settings['site_description']); ?>">
     
-    <!-- Mobile-first responsive design -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
-    
-    <!-- Theme CSS -->
+    <!-- Dark Theme CSS -->
     <link rel="stylesheet" href="/themes/<?php echo getActiveTheme(); ?>/style.css?v=<?php echo time(); ?>">
+    
+    <!-- Dark theme meta -->
+    <meta name="theme-color" content="#121212">
+    <meta name="color-scheme" content="dark">
     
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="/assets/favicon.ico">
@@ -20,7 +21,7 @@
     <meta property="og:description" content="<?php echo htmlspecialchars($settings['site_description']); ?>">
     <meta property="og:type" content="website">
 </head>
-<body class="dark-theme">
+<body>
     <header class="site-header">
         <div class="container">
             <div class="header-content">

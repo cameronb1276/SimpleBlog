@@ -420,7 +420,7 @@ function uploadFile($file, $allowed_types = null) {
         $allowed_types = ALLOWED_UPLOAD_TYPES;
     }
     
-    $upload_dir = '/var/www/html/assets/uploads/';
+    $upload_dir = $_SERVER['DOCUMENT_ROOT'] . '/assets/uploads/';
     $file_extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
     
     // Validate file
