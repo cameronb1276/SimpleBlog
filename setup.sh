@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# SimpleBlog Production Setup Script
-# This script configures SimpleBlog for your server environment
+# SimpleBlog Complete Production Setup Script for Ubuntu
+# This script installs dependencies, configures SimpleBlog, and sets up phpMyAdmin
 
 set -e  # Exit on any error
 
@@ -15,18 +15,22 @@ NC='\033[0m' # No Color
 # Configuration variables
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR="${SCRIPT_DIR}/backup-$(date +%Y%m%d-%H%M%S)"
-INSTALL_DIR=""
+WEBROOT="/var/www/html"
+BLOG_DIR_NAME=""
+BLOG_FULL_PATH=""
 SITE_TITLE=""
 SITE_DESCRIPTION=""
 ADMIN_USERNAME=""
 ADMIN_PASSWORD=""
 ADMIN_EMAIL=""
-DB_HOST=""
+DB_HOST="localhost"
 DB_NAME=""
 DB_USER=""
 DB_PASS=""
-CREATE_DB_USER="false"
-ROOT_DB_PASS=""
+DB_ROOT_PASS=""
+PHPMYADMIN_USER=""
+PHPMYADMIN_PASS=""
+DOMAIN_NAME=""
 
 # Function to print colored output
 print_status() {
@@ -96,34 +100,259 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Function to escape sed special characters
-escape_sed() {
-    echo "$1" | sed 's/[[\\.\\*^$()+?{|]/\\\\&/g'
+# Function to check if package is installed
+package_installed() {
+    dpkg -l | grep -q "^ii  $1 "
 }
 
-# Function to create database and user
-create_database() {
-    print_status "Creating database and user..."
+# Function to install Apache
+install_apache() {
+    print_status "Installing Apache web server..."
     
-    # Create database
-    mysql -u root -p"$ROOT_DB_PASS" -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+    apt update
+    apt install -y apache2
     
-    if [ "$CREATE_DB_USER" = "true" ]; then
-        # Create database user
-        mysql -u root -p"$ROOT_DB_PASS" -e "CREATE USER IF NOT EXISTS '$DB_USER'@'$DB_HOST' IDENTIFIED BY '$DB_PASS';"
-        mysql -u root -p"$ROOT_DB_PASS" -e "GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'$DB_HOST';"
-        mysql -u root -p"$ROOT_DB_PASS" -e "FLUSH PRIVILEGES;"
+    # Enable Apache modules
+    a2enmod rewrite
+    a2enmod ssl
+    
+    # Start and enable Apache
+    systemctl start apache2
+    systemctl enable apache2
+    
+    print_success "Apache installed and configured"
+}
+
+# Function to install PHP and dependencies
+install_php() {
+    print_status "Installing PHP and required extensions..."
+    
+    apt install -y php php-mysql php-mbstring php-zip php-gd php-json php-curl php-xml php-intl php-bcmath
+    
+    # Restart Apache to load PHP
+    systemctl restart apache2
+    
+    print_success "PHP and extensions installed"
+}
+
+# Function to install MySQL
+install_mysql() {
+    print_status "Installing MySQL server..."
+    
+    # Set non-interactive mode for MySQL installation
+    export DEBIAN_FRONTEND=noninteractive
+    
+    # Pre-configure MySQL root password
+    echo "mysql-server mysql-server/root_password password $DB_ROOT_PASS" | debconf-set-selections
+    echo "mysql-server mysql-server/root_password_again password $DB_ROOT_PASS" | debconf-set-selections
+    
+    apt install -y mysql-server
+    
+    # Start and enable MySQL
+    systemctl start mysql
+    systemctl enable mysql
+    
+    # Secure MySQL installation (automated)
+    mysql -u root -p"$DB_ROOT_PASS" -e "DELETE FROM mysql.user WHERE User='';"
+    mysql -u root -p"$DB_ROOT_PASS" -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
+    mysql -u root -p"$DB_ROOT_PASS" -e "DROP DATABASE IF EXISTS test;"
+    mysql -u root -p"$DB_ROOT_PASS" -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
+    mysql -u root -p"$DB_ROOT_PASS" -e "FLUSH PRIVILEGES;"
+    
+    print_success "MySQL installed and secured"
+}
+
+# Function to check system requirements
+check_requirements() {
+    print_status "Checking system requirements..."
+    
+    # Check if running as root
+    if [ "$EUID" -ne 0 ]; then
+        print_error "This script must be run as root (use sudo)"
+        exit 1
     fi
     
-    print_success "Database and user created successfully"
+    # Check Ubuntu version
+    if ! grep -q "Ubuntu" /etc/os-release; then
+        print_warning "This script is designed for Ubuntu. Proceeding anyway..."
+    fi
+    
+    # Check internet connection
+    if ! ping -c 1 google.com &> /dev/null; then
+        print_error "No internet connection. Please check your network."
+        exit 1
+    fi
+    
+    print_success "System requirements check passed"
 }
 
-# Function to import database schema
-import_database_schema() {
-    print_status "Creating database tables..."
+# Function to install dependencies
+install_dependencies() {
+    print_status "Installing system dependencies..."
     
-    # Create the database schema
-    cat << 'EOF' | mysql -u "$DB_USER" -p"$DB_PASS" -h "$DB_HOST" "$DB_NAME"
+    # Update package list
+    apt update
+    
+    # Install basic tools
+    apt install -y wget unzip curl software-properties-common
+    
+    # Check and install Apache
+    if ! package_installed "apache2"; then
+        install_apache
+    else
+        print_success "Apache already installed"
+    fi
+    
+    # Check and install PHP
+    if ! command_exists "php"; then
+        install_php
+    else
+        print_success "PHP already installed"
+    fi
+    
+    # Check and install MySQL
+    if ! package_installed "mysql-server"; then
+        install_mysql
+    else
+        print_success "MySQL already installed"
+    fi
+    
+    print_success "All dependencies installed"
+}
+
+# Function to setup MySQL database and user
+setup_mysql() {
+    print_status "Setting up MySQL database and user..."
+    
+    # Create database
+    mysql -u root -p"$DB_ROOT_PASS" -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+    
+    # Create database user
+    mysql -u root -p"$DB_ROOT_PASS" -e "CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';"
+    mysql -u root -p"$DB_ROOT_PASS" -e "GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'localhost';"
+    mysql -u root -p"$DB_ROOT_PASS" -e "FLUSH PRIVILEGES;"
+    
+    print_success "MySQL database and user created"
+}
+
+# Function to download and setup phpMyAdmin
+setup_phpmyadmin() {
+    print_status "Downloading and setting up phpMyAdmin..."
+    
+    cd /tmp
+    
+    # Download phpMyAdmin
+    wget -q "https://files.phpmyadmin.net/phpMyAdmin/5.2.2/phpMyAdmin-5.2.2-all-languages.zip" -O phpmyadmin.zip
+    
+    # Extract phpMyAdmin
+    unzip -q phpmyadmin.zip
+    
+    # Move to web directory
+    mv phpMyAdmin-5.2.2-all-languages "$WEBROOT/phpmyadmin"
+    
+    # Set permissions
+    chown -R www-data:www-data "$WEBROOT/phpmyadmin"
+    chmod -R 755 "$WEBROOT/phpmyadmin"
+    
+    # Create phpMyAdmin configuration
+    cat > "$WEBROOT/phpmyadmin/config.inc.php" << EOF
+<?php
+\$cfg['blowfish_secret'] = '$(generate_password)';
+\$i = 0;
+\$i++;
+\$cfg['Servers'][\$i]['auth_type'] = 'cookie';
+\$cfg['Servers'][\$i]['host'] = 'localhost';
+\$cfg['Servers'][\$i]['compress'] = false;
+\$cfg['Servers'][\$i]['AllowNoPassword'] = false;
+\$cfg['UploadDir'] = '';
+\$cfg['SaveDir'] = '';
+\$cfg['TempDir'] = '/tmp';
+?>
+EOF
+    
+    # Clean up
+    rm -f /tmp/phpmyadmin.zip
+    rm -rf /tmp/phpMyAdmin-5.2.2-all-languages
+    
+    print_success "phpMyAdmin installed and configured"
+}
+
+# Function to copy SimpleBlog files
+copy_simpleblog_files() {
+    print_status "Copying SimpleBlog files to web directory..."
+    
+    # Create blog directory
+    mkdir -p "$BLOG_FULL_PATH"
+    
+    # Copy all files except setup scripts and git files
+    rsync -av --exclude='setup*.sh' --exclude='.git*' --exclude='*.md' "$SCRIPT_DIR/" "$BLOG_FULL_PATH/"
+    
+    # Create uploads directory if it doesn't exist
+    mkdir -p "$BLOG_FULL_PATH/assets/uploads"
+    
+    # Set proper permissions
+    chown -R www-data:www-data "$BLOG_FULL_PATH"
+    chmod -R 755 "$BLOG_FULL_PATH"
+    chmod -R 775 "$BLOG_FULL_PATH/assets/uploads"
+    
+    print_success "SimpleBlog files copied successfully"
+}
+
+# Function to create config.php
+create_config_php() {
+    print_status "Creating configuration file..."
+    
+    # Create includes directory if it doesn't exist
+    mkdir -p "$BLOG_FULL_PATH/includes"
+    
+    # Create config.php
+    cat > "$BLOG_FULL_PATH/includes/config.php" << EOF
+<?php
+// SimpleBlog Configuration File
+// Generated by setup script on $(date)
+
+// Database Configuration
+define('DB_HOST', '$DB_HOST');
+define('DB_NAME', '$DB_NAME');
+define('DB_USER', '$DB_USER');
+define('DB_PASS', '$DB_PASS');
+
+// Site Configuration
+define('SITE_URL', 'http://$DOMAIN_NAME/$BLOG_DIR_NAME');
+define('ADMIN_URL', 'http://$DOMAIN_NAME/$BLOG_DIR_NAME/admin');
+
+// Security
+define('SESSION_TIMEOUT', 3600); // 1 hour
+define('MAX_LOGIN_ATTEMPTS', 5);
+define('LOCKOUT_TIME', 900); // 15 minutes
+
+// File Upload
+define('MAX_UPLOAD_SIZE', 5242880); // 5MB
+define('UPLOAD_PATH', 'assets/uploads/');
+
+// Database connection
+try {
+    \$pdo = new PDO("mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4", DB_USER, DB_PASS);
+    \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    \$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+} catch(PDOException \$e) {
+    die("Connection failed: " . \$e->getMessage());
+}
+?>
+EOF
+    
+    chmod 640 "$BLOG_FULL_PATH/includes/config.php"
+    chown www-data:www-data "$BLOG_FULL_PATH/includes/config.php"
+    
+    print_success "Configuration file created"
+}
+
+# Function to setup database schema
+setup_database_schema() {
+    print_status "Setting up database schema..."
+    
+    # Create database tables
+    mysql -u "$DB_USER" -p"$DB_PASS" -h "$DB_HOST" "$DB_NAME" << 'EOF'
 -- SimpleBlog Database Schema
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -161,23 +390,24 @@ CREATE TABLE IF NOT EXISTS settings (
     option_value TEXT,
     INDEX idx_option_name (option_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Insert default settings
-INSERT IGNORE INTO settings (option_name, option_value) VALUES
-('site_title', 'PLACEHOLDER_SITE_TITLE'),
-('site_description', 'PLACEHOLDER_SITE_DESCRIPTION'),
-('active_theme', 'default'),
-('posts_per_page', '10');
 EOF
-
-    print_success "Database tables created successfully"
+    
+    # Insert default settings
+    mysql -u "$DB_USER" -p"$DB_PASS" -h "$DB_HOST" "$DB_NAME" -e "
+        INSERT IGNORE INTO settings (option_name, option_value) VALUES
+        ('site_title', '$SITE_TITLE'),
+        ('site_description', '$SITE_DESCRIPTION'),
+        ('active_theme', 'default'),
+        ('posts_per_page', '10');"
+    
+    print_success "Database schema created"
 }
 
 # Function to create admin user
 create_admin_user() {
     print_status "Creating admin user..."
     
-    # Generate password hash
+    # Generate password hash using PHP
     local password_hash
     password_hash=$(php -r "echo password_hash('$ADMIN_PASSWORD', PASSWORD_DEFAULT);")
     
@@ -189,149 +419,79 @@ create_admin_user() {
             email = VALUES(email),
             password_hash = VALUES(password_hash);"
     
-    print_success "Admin user created successfully"
+    print_success "Admin user created"
 }
 
-# Function to configure files
-configure_files() {
-    print_status "Configuring application files..."
+# Function to configure Apache virtual host
+configure_apache() {
+    print_status "Configuring Apache virtual host..."
     
-    # Update config.php
-    local escaped_host escaped_name escaped_user escaped_pass
-    escaped_host=$(escape_sed "$DB_HOST")
-    escaped_name=$(escape_sed "$DB_NAME")
-    escaped_user=$(escape_sed "$DB_USER")
-    escaped_pass=$(escape_sed "$DB_PASS")
+    # Create virtual host configuration
+    cat > "/etc/apache2/sites-available/$BLOG_DIR_NAME.conf" << EOF
+<VirtualHost *:80>
+    ServerName $DOMAIN_NAME
+    DocumentRoot $BLOG_FULL_PATH
     
-    sed -i "s/PLACEHOLDER_DB_HOST/$escaped_host/g" "$INSTALL_DIR/includes/config.php"
-    sed -i "s/PLACEHOLDER_DB_NAME/$escaped_name/g" "$INSTALL_DIR/includes/config.php"
-    sed -i "s/PLACEHOLDER_DB_USER/$escaped_user/g" "$INSTALL_DIR/includes/config.php"
-    sed -i "s/PLACEHOLDER_DB_PASS/$escaped_pass/g" "$INSTALL_DIR/includes/config.php"
+    <Directory $BLOG_FULL_PATH>
+        AllowOverride All
+        Require all granted
+    </Directory>
     
-    # Update database settings
-    local escaped_title escaped_description
-    escaped_title=$(escape_sed "$SITE_TITLE")
-    escaped_description=$(escape_sed "$SITE_DESCRIPTION")
+    # Enable rewrite for clean URLs
+    RewriteEngine On
     
-    mysql -u "$DB_USER" -p"$DB_PASS" -h "$DB_HOST" "$DB_NAME" -e "
-        UPDATE settings SET option_value = '$escaped_title' WHERE option_name = 'site_title';
-        UPDATE settings SET option_value = '$escaped_description' WHERE option_name = 'site_description';"
+    ErrorLog \${APACHE_LOG_DIR}/${BLOG_DIR_NAME}_error.log
+    CustomLog \${APACHE_LOG_DIR}/${BLOG_DIR_NAME}_access.log combined
+</VirtualHost>
+EOF
     
-    print_success "Configuration files updated successfully"
-}
-
-# Function to set file permissions
-set_permissions() {
-    print_status "Setting file permissions..."
+    # Enable the site
+    a2ensite "$BLOG_DIR_NAME.conf"
     
-    # Set ownership to web server user
-    if command_exists apache2; then
-        WEB_USER="www-data"
-    elif command_exists nginx; then
-        WEB_USER="nginx"
-    elif command_exists httpd; then
-        WEB_USER="apache"
-    else
-        WEB_USER="www-data"
+    # Disable default site if this is the main domain
+    if [ "$BLOG_DIR_NAME" = "blog" ] || [ "$BLOG_DIR_NAME" = "www" ]; then
+        a2dissite 000-default.conf
     fi
     
-    # Set ownership and permissions
-    chown -R "$WEB_USER:$WEB_USER" "$INSTALL_DIR"
-    chmod -R 755 "$INSTALL_DIR"
-    chmod -R 775 "$INSTALL_DIR/assets/uploads"
-    chmod 640 "$INSTALL_DIR/includes/config.php"
+    # Reload Apache
+    systemctl reload apache2
     
-    print_success "File permissions set successfully"
+    print_success "Apache virtual host configured"
 }
 
-# Function to display summary
-display_summary() {
-    echo
-    print_success "SimpleBlog installation completed successfully!"
-    echo
-    echo "=== Installation Summary ==="
-    echo "Installation Directory: $INSTALL_DIR"
-    echo "Site Title: $SITE_TITLE"
-    echo "Site Description: $SITE_DESCRIPTION"
-    echo "Database Host: $DB_HOST"
-    echo "Database Name: $DB_NAME"
-    echo "Database User: $DB_USER"
-    echo "Admin Username: $ADMIN_USERNAME"
-    echo "Admin Email: $ADMIN_EMAIL"
-    echo
-    echo "=== Next Steps ==="
-    echo "1. Configure your web server to serve files from: $INSTALL_DIR"
-    echo "2. Access the admin panel at: http://your-domain/admin/"
-    echo "3. Login with username: $ADMIN_USERNAME"
-    echo "4. Change the default theme if desired"
-    echo "5. Create your first blog post"
-    echo
-    print_warning "Remember to:"
-    echo "- Keep your admin credentials secure"
-    echo "- Regularly backup your database"
-    echo "- Keep SimpleBlog updated"
-    echo
-}
-
-# Main setup function
-main() {
-    clear
+# Function to collect user input
+collect_user_input() {
     echo "========================================"
-    echo "    SimpleBlog Production Setup"
+    echo "    SimpleBlog Setup Configuration"
     echo "========================================"
-    echo "This script will help you set up SimpleBlog on your server."
     echo
-
-    # Check if running as root for file operations
-    if [ "$EUID" -ne 0 ]; then
-        print_warning "Some operations may require sudo privileges."
-    fi
-
-    # Check required commands
-    print_status "Checking system requirements..."
     
-    for cmd in php mysql; do
-        if ! command_exists "$cmd"; then
-            print_error "$cmd is not installed. Please install it first."
-            exit 1
-        fi
-    done
+    # Blog directory name
+    read_with_default "Enter blog directory name" "simpleblog" BLOG_DIR_NAME
+    BLOG_FULL_PATH="$WEBROOT/$BLOG_DIR_NAME"
     
-    print_success "System requirements check passed"
-    echo
-
-    # Get installation directory
-    read_with_default "Enter installation directory" "/var/www/html/simpleblog" INSTALL_DIR
+    # Domain name
+    read_with_default "Enter domain name (e.g., example.com or localhost)" "localhost" DOMAIN_NAME
     
-    # Validate installation directory
-    if [ ! -d "$(dirname "$INSTALL_DIR")" ]; then
-        print_error "Parent directory $(dirname "$INSTALL_DIR") does not exist"
-        exit 1
-    fi
-
-    # Create installation directory if it doesn't exist
-    if [ ! -d "$INSTALL_DIR" ]; then
-        mkdir -p "$INSTALL_DIR"
-        print_success "Created installation directory: $INSTALL_DIR"
-    fi
-
-    # Copy files to installation directory
-    print_status "Copying SimpleBlog files..."
-    cp -r "$SCRIPT_DIR"/* "$INSTALL_DIR"/
-    rm -f "$INSTALL_DIR/setup.sh"  # Remove setup script from installation
-    print_success "Files copied successfully"
-
-    echo
-    echo "=== Site Configuration ==="
-    
-    # Get site information
+    # Site information
     read_with_default "Enter site title" "My SimpleBlog" SITE_TITLE
-    read_with_default "Enter site description" "A modern blogging platform" SITE_DESCRIPTION
+    read_with_default "Enter site description" "A simple blog powered by SimpleBlog" SITE_DESCRIPTION
     
+    # Database credentials
     echo
-    echo "=== Admin User Configuration ==="
+    print_status "Database Configuration"
+    read_with_default "Enter MySQL root password" "" DB_ROOT_PASS
+    read_with_default "Enter database name" "${BLOG_DIR_NAME}_db" DB_NAME
+    read_with_default "Enter database username" "${BLOG_DIR_NAME}_user" DB_USER
     
-    # Get admin user information
+    # Generate or ask for database password
+    local generated_db_pass
+    generated_db_pass=$(generate_password)
+    read_with_default "Enter database password" "$generated_db_pass" DB_PASS
+    
+    # Admin credentials
+    echo
+    print_status "Admin User Configuration"
     read_with_default "Enter admin username" "admin" ADMIN_USERNAME
     
     while true; do
@@ -343,96 +503,106 @@ main() {
         fi
     done
     
-    while true; do
-        read_password "Enter admin password (leave empty to generate)" ADMIN_PASSWORD
-        if [ -z "$ADMIN_PASSWORD" ]; then
-            ADMIN_PASSWORD=$(generate_password)
-            print_success "Generated password: $ADMIN_PASSWORD"
-            break
-        elif [ ${#ADMIN_PASSWORD} -lt 8 ]; then
-            print_error "Password must be at least 8 characters long"
-        else
-            break
-        fi
-    done
-
-    echo
-    echo "=== Database Configuration ==="
-    
-    # Get database information
-    read_with_default "Enter database host" "localhost" DB_HOST
-    read_with_default "Enter database name" "simpleblog" DB_NAME
-    read_with_default "Enter database username" "bloguser" DB_USER
+    # Generate or ask for admin password
+    local generated_admin_pass
+    generated_admin_pass=$(generate_password)
+    read_with_default "Enter admin password" "$generated_admin_pass" ADMIN_PASSWORD
     
     echo
-    echo "Do you want to create a new database user? (y/n)"
-    read -r create_user_response
-    if [[ $create_user_response =~ ^[Yy]$ ]]; then
-        CREATE_DB_USER="true"
-        read_password "Enter password for database user (leave empty to generate)" DB_PASS
-        if [ -z "$DB_PASS" ]; then
-            DB_PASS=$(generate_password)
-            print_success "Generated database password: $DB_PASS"
-        fi
-        read_password "Enter MySQL root password" ROOT_DB_PASS
-    else
-        read_password "Enter existing database user password" DB_PASS
-    fi
-
-    # Verify database connection
-    print_status "Testing database connection..."
-    if mysql -u "$DB_USER" -p"$DB_PASS" -h "$DB_HOST" -e "SELECT 1;" >/dev/null 2>&1; then
-        print_success "Database connection successful"
-    elif [ "$CREATE_DB_USER" = "true" ]; then
-        print_status "Will create database user during setup"
-    else
-        print_error "Cannot connect to database. Please check your credentials."
-        exit 1
-    fi
-
-    echo
-    echo "=== Setup Summary ==="
-    echo "Installation Directory: $INSTALL_DIR"
+    print_status "Configuration Summary:"
+    echo "Blog Directory: $BLOG_FULL_PATH"
+    echo "Domain: $DOMAIN_NAME"
     echo "Site Title: $SITE_TITLE"
+    echo "Database: $DB_NAME"
+    echo "Database User: $DB_USER"
     echo "Admin Username: $ADMIN_USERNAME"
     echo "Admin Email: $ADMIN_EMAIL"
-    echo "Database Host: $DB_HOST"
-    echo "Database Name: $DB_NAME"
-    echo "Database User: $DB_USER"
     echo
-
+    
     echo "Proceed with installation? (y/n)"
     read -r confirm
     if [[ ! $confirm =~ ^[Yy]$ ]]; then
         print_status "Installation cancelled"
         exit 0
     fi
+}
 
+# Function to display final summary
+display_summary() {
+    echo
+    print_success "SimpleBlog installation completed successfully!"
+    echo
+    echo "=== Installation Summary ==="
+    echo "Blog URL: http://$DOMAIN_NAME/$BLOG_DIR_NAME"
+    echo "Admin Panel: http://$DOMAIN_NAME/$BLOG_DIR_NAME/admin/"
+    echo "phpMyAdmin: http://$DOMAIN_NAME/phpmyadmin/"
+    echo
+    echo "=== Credentials ==="
+    echo "Admin Username: $ADMIN_USERNAME"
+    echo "Admin Password: $ADMIN_PASSWORD"
+    echo "Admin Email: $ADMIN_EMAIL"
+    echo
+    echo "Database Name: $DB_NAME"
+    echo "Database User: $DB_USER"
+    echo "Database Password: $DB_PASS"
+    echo
+    echo "=== Next Steps ==="
+    echo "1. Visit your blog at: http://$DOMAIN_NAME/$BLOG_DIR_NAME"
+    echo "2. Access admin panel at: http://$DOMAIN_NAME/$BLOG_DIR_NAME/admin/"
+    echo "3. Manage database via phpMyAdmin at: http://$DOMAIN_NAME/phpmyadmin/"
+    echo "4. Create your first blog post"
+    echo
+    print_warning "Important Security Notes:"
+    echo "- Change default passwords after first login"
+    echo "- Consider setting up SSL/HTTPS"
+    echo "- Regularly backup your database"
+    echo "- Keep all software updated"
+    echo
+    print_success "Installation complete! Enjoy your new SimpleBlog!"
+}
+
+# Main function
+main() {
+    clear
+    echo "========================================"
+    echo "    SimpleBlog Complete Setup"
+    echo "========================================"
+    echo "This script will install and configure SimpleBlog with all dependencies."
+    echo
+    
+    # Check system requirements
+    check_requirements
+    
+    # Collect user input
+    collect_user_input
+    
     echo
     print_status "Starting SimpleBlog installation..."
-
-    # Create database and user if requested
-    if [ "$CREATE_DB_USER" = "true" ]; then
-        create_database
-    fi
-
-    # Import database schema
-    import_database_schema
-
+    
+    # Install dependencies
+    install_dependencies
+    
+    # Setup MySQL
+    setup_mysql
+    
+    # Setup phpMyAdmin
+    setup_phpmyadmin
+    
+    # Copy SimpleBlog files
+    copy_simpleblog_files
+    
+    # Create configuration
+    create_config_php
+    
+    # Setup database schema
+    setup_database_schema
+    
     # Create admin user
     create_admin_user
-
-    # Configure files
-    configure_files
-
-    # Set file permissions
-    if [ "$EUID" -eq 0 ]; then
-        set_permissions
-    else
-        print_warning "Skipping file permissions (not running as root)"
-        print_warning "You may need to set proper ownership and permissions manually"
-    fi
-
+    
+    # Configure Apache
+    configure_apache
+    
     # Display summary
     display_summary
 }
